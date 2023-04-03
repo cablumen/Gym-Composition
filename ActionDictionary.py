@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import os
 
 from AtomicAction import AtomicAction
 from DataManager import DataManager
@@ -9,28 +10,33 @@ import Settings
 
 
 class ActionDictionary:
-    def __init__(self, sub_model_architecture, critic_architecture):
-        self.__logger = Logger()
+    def __init__(self, run_folder, sub_model_architecture, critic_architecture):
+        architecture_folder = os.path.join(run_folder, sub_model_architecture.name + " " + critic_architecture.name)
+        if not os.path.isdir(architecture_folder):
+            os.mkdir(architecture_folder)
+            
+        self.logger = Logger(architecture_folder)
         self.__data_manager = DataManager()
 
-        self.__action_critic = ActionCritic(self.__logger, self.__data_manager, critic_architecture)
+        self.__action_critic = ActionCritic(self.logger, self.__data_manager, critic_architecture)
 
         self.__action_list = []
         for action_index in range(Settings.ACTION_SIZE):
-            self.__action_list.append(AtomicAction(self.__logger, self.__data_manager, sub_model_architecture, action_index))
+            self.__action_list.append(AtomicAction(self.logger, self.__data_manager, sub_model_architecture, action_index))
 
         self.__training_step = 0
-    
+
     def get_reward_model_name(self):
-        return self.__action_critic.get_name()
+        return self.__action_critic.name
 
     def get_submodel_name(self):
-        return self.__action_list[0].get_name()
+        return self.__action_list[0].name
 
     def get_action_count(self):
         return len(self.__action_list)
 
     def put_action_data(self, action_index, action_record):
+        self.logger.log_action_data(action_record)
         self.__data_manager.put_action_data(action_index, action_record)
 
     def predict_random_action(self, state):
@@ -70,9 +76,9 @@ class ActionDictionary:
 
         self.__training_step += 1
 
-    def evaluate_models(self, episode):
+    def evaluate_models(self):
         for action in self.__action_list:
-            action.evaluate(episode)
+            action.evaluate()
     
     def reset(self):
         self.__data_manager.reset()

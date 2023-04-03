@@ -7,6 +7,8 @@ EPOCHS = 40                         # epochs to train models and sub-models
 
 #   exploration parameters
 MAX_TRAINING_STEPS = 300            # max steps per episode
+SESSION_COUNT = 5
+EPISODE_COUNT = 200
 
 #   epsilon exploration parameters
 EPSILON_START = 1.0

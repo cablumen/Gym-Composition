@@ -1,84 +1,99 @@
 import csv
 import matplotlib.pyplot as plt
 import os
-import time
-import uuid
 
 import Settings
 
 class Logger:
-    def __init__(self, logging_enabled=True):
+    def __init__(self, architecture_folder, logging_enabled=True):
+        self.__architecture_folder = architecture_folder
         self.__logging_enabled = logging_enabled
 
+        # create sub-folders for architecture data
+        self.__session_path = None
+        self.__episode_path = None
+
+        self.__summary_folder = os.path.join(architecture_folder, "Summary")
+        if not os.path.isdir(self.__summary_folder):
+            os.mkdir(self.__summary_folder)
+            
+        self.__reward_writer = None
+
+        # {action_index -> writer}
         self.__model_train_writers = {}
         self.__model_evaluate_writers = {}
 
-        # get current directory path
-        dir_path = os.path.dirname(os.path.abspath(__file__))
-        
-        # create sub-folder for all training data and graphs
-        training_path = os.path.join(dir_path, "training records")
-        if not os.path.isdir(training_path):
-            os.mkdir(training_path)
-
-        # create sub-folder for specific run
-        self.__log_folder = os.path.join(training_path, str(time.strftime("%Y-%m-%d_%H-%M-%S")))
-        if not os.path.isdir(self.__log_folder):
-            os.mkdir(self.__log_folder)
-
         self.__set_plt_params()
+
+    @property
+    def session(self):
+        return self._session
+
+    @session.setter
+    def session(self, value):
+        self.__session_path = os.path.join(self.__architecture_folder, "Session " + str(value))
+        if not os.path.isdir(self.__session_path):
+            os.mkdir(self.__session_path)
+
+        self._session = value
+
+    @property
+    def episode(self):
+        return self._episode
+
+    @episode.setter
+    def episode(self, value):
+        self.__episode_path = os.path.join(self.__session_path, "Episode " + str(value))
+        if not os.path.isdir(self.__episode_path):
+            os.mkdir(self.__episode_path)
+
+        #       create reward file writer
+        reward_path = os.path.join(self.__episode_path, "Reward")
+        reward_file = open(reward_path, 'w', newline='')
+        self.__reward_writer = csv.writer(reward_file)
+        self.__reward_writer.writerow(["Step", "Reward"])
+        
+        #       create sub-model writers
+        for action_index in range(Settings.ACTION_SIZE):
+            # create training file writer
+            submodel_training_path = os.path.join(self.__episode_path, str(action_index) + '_training.csv')
+            training_file = open(submodel_training_path, 'w', newline='')
+            self.__model_train_writers[action_index] = csv.writer(training_file)
+            self.__model_train_writers[action_index].writerow(["Epoch", "Training MSE", "Validation MSE"])
+
+            # create evaluation file writer
+            submodel_evaluation_path = os.path.join(self.__episode_path, str(action_index) + '_evaluation.csv')
+            evaluation_file = open(submodel_evaluation_path, 'w', newline='')
+            self.__model_evaluate_writers[action_index] = csv.writer(evaluation_file)
+            self.__model_evaluate_writers[action_index].writerow(["Step", "Evaluation MSE"])
+
+        self._episode = value
+
+    @property
+    def step(self):
+        return self._step
+
+    @step.setter
+    def step(self, value):
+        self._step = value
+
+    def log_action_data(self, action_record):
+        self.__reward_writer.writerow([self.step, action_record[3]])
 
     def print(self, string, log_level = 0):
         if self.__logging_enabled and log_level.value >= Settings.LOG_LEVEL:
             print(string)
 
-    def add_model_writer(self, model_name, model_id):
-        # create csv writer
-        training_path = os.path.join(self.__log_folder, model_name + '_training.csv')
-        evaluation_path = os.path.join(self.__log_folder, model_name + '_evaluation.csv')
-
-        # find a unique filepath for the writers
-        file_index = 1
-        while(os.path.exists(training_path) or os.path.exists(evaluation_path)):
-            training_path = os.path.join(self.__log_folder, model_name + '_training_' + str(file_index) + '.csv')
-            evaluation_path = os.path.join(self.__log_folder, model_name + '_evaluation_' + str(file_index) + '.csv')
-            file_index += 1
-
-        #       create training file writer
-        training_file = open(training_path, 'w', newline='')
-        self.__model_train_writers[model_id] = csv.writer(training_file)
-
-        # write column headers
-        self.__model_train_writers[model_id].writerow(["Epoch", "Training MSE", "Validation MSE"])
-        
-
-        #       create evaluation file writer
-        evaluation_file = open(evaluation_path, 'w', newline='')
-        self.__model_evaluate_writers[model_id] = csv.writer(evaluation_file)
-
-        # write column headers
-        self.__model_evaluate_writers[model_id].writerow(["Step", "Evaluation MSE"])
-
-    def log_training(self, model_id, training_history):
+    def log_training(self, action_index, training_history):
         # write training history
         for epoch in range(len(training_history.epoch)):
             epoch_mse = training_history.history["mse"][epoch]
             epoch_val_mse = training_history.history["val_mse"][epoch]
             # TOOD: add offset for epoch
-            self.__model_train_writers[model_id].writerow([epoch, epoch_mse, epoch_val_mse])
+            self.__model_train_writers[action_index].writerow([epoch, epoch_mse, epoch_val_mse])
 
-    def log_evaluation(self, episode, model_id, mse):
-        self.__model_evaluate_writers[model_id].writerow([episode, mse])
-
-    def log_rewards(self, epsilon_rewards):
-        reward_path = os.path.join(self.__log_folder, str(uuid.uuid4()) + '_rewards.csv')
-        reward_file = open(reward_path, 'w', newline='')
-        reward_writer = csv.writer(reward_file)
-        reward_writer.writerow(["Episode Index", "Average Reward"])
-
-        for episode_index in range(len(epsilon_rewards)):
-            episode_index_mean = epsilon_rewards[episode_index]
-            reward_writer.writerow([episode_index, episode_index_mean])
+    def log_evaluation(self, action_index, mse):
+        self.__model_evaluate_writers[action_index].writerow([self.episode, mse])
 
     def visualize_training(self, model_name, training_history):
         # AtomicModel logs
@@ -97,14 +112,6 @@ class Logger:
         plt.legend(loc="center right")
         fig_path = os.path.join(self.__log_folder, model_name + " training.png")
         plt.savefig(fig_path)
-
-    #
-    def __get_unique_path(self, path):
-        file_index = 1
-        while(os.path.exists(path)):
-            training_path = os.path.join(self.__log_folder, model_name + '_training_' + str(file_index) + '.csv')
-            file_index += 1
-        return 
 
     def __set_plt_params(self):
         background_color = "#1E1E1E"

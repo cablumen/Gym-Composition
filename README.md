@@ -27,3 +27,4 @@ Environment info (from https://github.com/openai/gym/blob/6e2e921b5faaa9c356f589
 TODO:
     Test reward arch impact on reward
     Move AtomicAction train logging to evulate based on step
+    Change get/set logic so it's directly invoked instead of through helper methods

@@ -30,12 +30,15 @@ class AtomicAction:
         self.__logger.print("AtomicAction(predict): " + self.name, LogLevel.INFO)
         return self.__model.predict(state, verbose=self.__model_verbosity)
 
+    def predict_batch(self, state_batch):
+        self.__logger.print("AtomicAction(predict_batch): " + self.name, LogLevel.INFO)
+        return self.__model.predict(state_batch, batch_size=Settings.BATCH_SIZE, verbose=self.__model_verbosity)
+
     def evaluate(self):
         self.__logger.print("AtomicModel(evaluate): " + self.name, LogLevel.INFO)
         if self.__data_manager.is_training_ready(self.__action_index):
             _, _, test_x, test_y = self.__data_manager.get_action_data(self.__action_index)
-            # TODO: why not predict batch here?
-            predict_y = self.predict(test_x)
+            predict_y = self.predict_batch(test_x)
             mse = ((np.square(predict_y - test_y)).mean(axis=1)).mean()
             self.__logger.log_evaluation(self.__action_index, mse)
 
